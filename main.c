@@ -17,6 +17,8 @@ enum table_type{
     LIT
 };
 
+const char * gettype_by_num[] = {"INT", "ID", "DEL", "KEY", "LIT"};
+
 struct lexeme{
     char value[MAX_LEXEM_LEN];
     enum table_type type;
@@ -80,7 +82,6 @@ struct lexeme * read_values_from_file(char * filename, enum table_type type){
 }
 
 char get_char(){
-    //todo: Ignore whitespace, newLine, Tab, Backspace and so on;
     return toupper(fgetc(code_file_ptr));
 }
 
@@ -119,9 +120,6 @@ struct record * add_record(struct lexeme * lexeme){
     struct record * record = malloc(sizeof(struct record));
     record->lex = lexeme;
     record->next = NULL;
-    //  LOG
-    printf("\nvalue %s", lexeme->value);
-    //
     if (record_list == NULL){
         record->id = 0;
         record->first = record;
@@ -187,14 +185,33 @@ char delim(char first_char){
     int len = 0;
     char buffer_double[MAX_LEXEM_LEN];
     char buffer_single[MAX_LEXEM_LEN];
+    char ch;
     buffer_single[len] = first_char;
     buffer_double[len++] = first_char;
+
+    if (first_char == '\''){
+        char buffer[MAX_LEXEM_LEN];
+        int lit_len = 0;
+        while ((ch = get_char()) != '\'' && ch != EOF){
+            buffer[lit_len++] = ch;
+        };
+        buffer[lit_len] = '\0';
+        struct lexeme * lex = lookup(buffer, lit_list);
+        if (lex == NULL){
+            lit_list = add_lexeme(LIT, lit_list, buffer);
+            lex = lit_list;
+        }
+        add_record(lex);
+        ch = get_char();
+        return ch;
+    }
+
+
     buffer_single[len] = '\0';
-    char ch = get_char();
+    ch = get_char();
     buffer_double[len++] = ch;
     buffer_double[len] = '\0';
     struct lexeme * double_delim = lookup(buffer_double, delim_list);
-    //todo: add LITERALS
     if (double_delim != NULL){
         add_record(double_delim);
         ch = get_char();
@@ -210,6 +227,12 @@ void scan(){
     char ch;
     ch = get_char();
     while (ch != EOF){
+
+        if(ch == ' ' || ch == '\n'){
+            ch = get_char();
+            continue;
+        }
+
         if(isalpha(ch)){
             ch = iden(ch);
             continue;
@@ -226,23 +249,50 @@ void scan(){
         }
 
 
-        printf("Error!!! Unknown construction: '%c'", ch);
+        printf("Error. Unknown construction: '%c'", ch);
         break;
     }
 }
 
 
+void print_lexeme_list(struct lexeme * last_lex){
+    if (last_lex != NULL) {
+        struct lexeme *iter = last_lex->first;
+        printf("\n%s TABLE", gettype_by_num[iter->type]);
+        do {
+            printf("\n%d \t\t%s", iter->id, iter->value);
+        } while ((iter = iter->next) != NULL);
+        printf("\n");
+    }
+}
 
+void print_record_list(){
+    if (record_list != NULL) {
+        struct record *iter = record_list->first;
+        printf("\nRECORD TABLE");
+        do {
+            printf("\n%d\t%s\t%d\t%s", iter->id, gettype_by_num[iter->lex->type], iter->lex->id, iter->lex->value);
+        } while ((iter = iter->next) != NULL);
+        printf("\n");
+    }
+}
 
 
 int main() {
     delim_list = read_values_from_file(DELIM_FILENAME, DELIM);
     key_list = read_values_from_file(KEYWORD_FILENAME, KEY);
     code_file_ptr = fopen(PROGRAM_FILENAME, "r");
-    delim_list = add_lexeme(DELIM, delim_list, "\n");
-    delim_list = add_lexeme(DELIM, delim_list, " ");
+
     scan();
+
     fclose(code_file_ptr);
+
+    print_lexeme_list(delim_list);
+    print_lexeme_list(key_list);
+    print_lexeme_list(id_list);
+    print_lexeme_list(lit_list);
+    print_lexeme_list(int_list);
+    print_record_list();
 
     return 0;
 }
