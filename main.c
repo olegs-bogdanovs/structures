@@ -4,7 +4,7 @@
 #include <ctype.h>
 #include <jmorecfg.h>
 
-#define MAX_LEXEM_LEN 64
+#define MAX_LEXEM_LEN 120
 #define DELIM_FILENAME "./delim"
 #define KEYWORD_FILENAME "./keywords"
 #define PROGRAM_FILENAME "./program_code"
@@ -34,12 +34,19 @@ struct record{
     struct record * next;
 };
 
+//todo make ftell; get cursor;
+struct error{
+    char message[1024];
+};
+
 struct lexeme * delim_list = NULL;
 struct lexeme * key_list  = NULL ;
 struct lexeme * id_list  = NULL;
 struct lexeme * int_list = NULL;
 struct lexeme * lit_list = NULL;
 struct record * record_list = NULL;
+struct error * global_error = NULL;
+char current_char = NULL;
 
 FILE * code_file_ptr;
 
@@ -140,7 +147,7 @@ boolean isdelim(char ch){
     else return FALSE;
 }
 
-char iden(char first_char){
+struct lexeme * iden(char first_char){
     int len = 0;
     char buffer[MAX_LEXEM_LEN];
     buffer[len++] = first_char;
@@ -160,9 +167,10 @@ char iden(char first_char){
     }
 
     add_record(lex);
-    return ch;
+    current_char = ch;
+    return lex;
 }
-char digit(char first_char){
+struct lexeme * digit(char first_char){
     int len = 0;
     char buffer[MAX_LEXEM_LEN];
     buffer[len++] = first_char;
@@ -178,10 +186,11 @@ char digit(char first_char){
         lex = int_list;
     }
     add_record(lex);
-    return ch;
+    current_char = ch;
+    return lex;
 }
 
-char delim(char first_char){
+struct lexeme * delim(char first_char){
     int len = 0;
     char buffer_double[MAX_LEXEM_LEN];
     char buffer_single[MAX_LEXEM_LEN];
@@ -195,6 +204,11 @@ char delim(char first_char){
         while ((ch = get_char()) != '\'' && ch != EOF){
             buffer[lit_len++] = ch;
         };
+        if (ch == EOF){
+            global_error = malloc(sizeof(struct error));
+            char message[1024] = "Closing delimeter \' absent";
+            strcpy(global_error->message, message);
+        }
         buffer[lit_len] = '\0';
         struct lexeme * lex = lookup(buffer, lit_list);
         if (lex == NULL){
@@ -203,7 +217,8 @@ char delim(char first_char){
         }
         add_record(lex);
         ch = get_char();
-        return ch;
+        current_char = ch;
+        return lex;
     }
 
 
@@ -211,47 +226,52 @@ char delim(char first_char){
     ch = get_char();
     buffer_double[len++] = ch;
     buffer_double[len] = '\0';
-    struct lexeme * double_delim = lookup(buffer_double, delim_list);
-    if (double_delim != NULL){
-        add_record(double_delim);
+    struct lexeme * lex = lookup(buffer_double, delim_list);
+    if (lex != NULL){
+        add_record(lex);
         ch = get_char();
     } else {
-        add_record(lookup(buffer_single, delim_list));
+        lex = lookup(buffer_single, delim_list);
+        add_record(lex);
     }
-    return ch;
+    current_char = ch;
+    return lex;
+
 }
 
 
 
-void scan(){
-    char ch;
-    ch = get_char();
-    while (ch != EOF){
-
-        if(ch == ' ' || ch == '\n'){
-            ch = get_char();
-            continue;
+struct lexeme * scan(){
+        if (current_char == NULL){
+            current_char = get_char();
         }
 
-        if(isalpha(ch)){
-            ch = iden(ch);
-            continue;
+        while (current_char == ' ' || current_char == '\n'){
+            current_char = get_char();
         }
 
-        if isdigit(ch){
-            ch = digit(ch);
-            continue;
+        if (current_char == EOF){
+            return NULL;
         }
 
-        if (isdelim(ch)){
-            ch = delim(ch);
-            continue;
+        if(isalpha(current_char)){
+            return iden(current_char);
         }
 
+        if isdigit(current_char){
+            return digit(current_char);
+        }
 
-        printf("Error. Unknown construction: '%c'", ch);
-        break;
-    }
+        if (isdelim(current_char)){
+            return delim(current_char);
+        }
+
+        global_error = malloc(sizeof(struct error));
+        char message[1024];
+        sprintf(message, "ERROR. Unknown characher %c", current_char);
+        strcpy(global_error->message, message);
+        return NULL;
+
 }
 
 
@@ -282,8 +302,10 @@ int main() {
     delim_list = read_values_from_file(DELIM_FILENAME, DELIM);
     key_list = read_values_from_file(KEYWORD_FILENAME, KEY);
     code_file_ptr = fopen(PROGRAM_FILENAME, "r");
+    struct lexeme * lex;
 
-    scan();
+    while ((lex = scan()) != NULL);
+
 
     fclose(code_file_ptr);
 
@@ -293,6 +315,10 @@ int main() {
     print_lexeme_list(lit_list);
     print_lexeme_list(int_list);
     print_record_list();
+
+    if (global_error->message != NULL){
+        printf ("%s", global_error->message);
+    }
 
     return 0;
 }

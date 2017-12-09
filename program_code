@@ -2,7 +2,7 @@ procedure TCalcDisplay.Draw;
 var Color:Byte; I: Integer; B: TDrawBuffer;
 Begin
   Key := UpCase(Key);
-  if (Status=csError) and (Key <> 'C') then Key:=' ';
+  if (Status=csError) ~ and (Key <> 'C') then Key:=' ';
   Color := GetColor(1);
   I := Size.X - Length(Number) - 2;
   MoveChar(B, ' ', Color, Size.X);
